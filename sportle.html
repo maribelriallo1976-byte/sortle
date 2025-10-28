@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SPORTLE - Torneos (Oscuro Refinado)</title>
+
+  <!-- Leaflet -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* ===========================
+       PALETA / VARIABLES (Oscuro)
+       =========================== */
+    :root{
+      --morado:#7A3EF0;           /* morado principal */
+      --azul-oscuro:#0F1530;      /* azul oscuro de fondo */
+      --rosado:#B5179E;           /* rosado oscuro (usarás esta opción) */
+      --texto:#F5F6F8;
+      --muted:rgba(245,246,248,0.66);
+      --glass:rgba(255,255,255,0.02);
+      --card:rgba(255,255,255,0.03);
+      --radius:12px;
+    }
+
+    /* Reset y básicos */
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;background:var(--azul-oscuro);color:var(--texto);-webkit-font-smoothing:antialiased}
+    a{color:inherit;text-decoration:none}
+
+    /* Fondo animado */
+    body::before{
+      content:"";position:fixed;inset:0;z-index:-2;
+      background: linear-gradient(120deg,var(--morado),var(--rosado),#12021a,var(--azul-oscuro));
+      background-size:220% 220%;
+      filter:saturate(1.02) contrast(1.02);
+      animation:bgMove 18s linear infinite;
+      opacity:0.94;
+    }
+    @keyframes bgMove{0%{background-position:0% 50%}50%{background-position:100% 50%}100%{background-position:0% 50%}}
+
+    /* decorative particles container */
+    #particles{position:fixed;inset:0;z-index:-1;pointer-events:none}
+
+    /* App layout */
+    .app{display:flex;min-height:100vh;gap:18px;padding:20px;align-items:flex-start}
+    .sidebar{width:96px;min-width:96px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:16px;padding:12px;display:flex;flex-direction:column;gap:12px;align-items:center;box-shadow:0 10px 30px rgba(3,6,20,0.7);position:sticky;top:20px;height:calc(100vh - 40px)}
+    .logo-animado{width:56px;height:56px;border-radius:12px;object-fit:cover;border:2px solid rgba(255,255,255,0.06);box-shadow:0 8px 24px rgba(181,23,158,0.12);animation:pulse 3s ease-in-out infinite; background:#fff}
+    @keyframes pulse{0%{transform:scale(1)}50%{transform:scale(1.06)}100%{transform:scale(1)}}
+    .icon-btn{width:100%;display:flex;justify-content:center;padding:10px;border-radius:10px;cursor:pointer;border:0;background:transparent;color:var(--muted);transition:all .18s;font-weight:800;font-size:18px}
+    .icon-btn.active{background:linear-gradient(90deg, rgba(181,23,158,0.12), rgba(122,62,240,0.06));color:var(--texto);box-shadow:0 8px 30px rgba(181,23,158,0.12)}
+    .hint{font-size:11px;color:var(--muted);text-align:center;margin-top:auto;padding:6px;font-weight:700}
+
+    .main-panel{flex:1;min-width:280px}
+    .container{display:grid;grid-template-columns:1fr;gap:16px}
+    .card{background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01));border-radius:14px;padding:14px;border:1px solid rgba(255,255,255,0.04);box-shadow:0 8px 30px rgba(2,4,20,0.6);transition:transform .18s}
+    .card:hover{transform:translateY(-6px)}
+    h1,h2,h3{margin:0 0 8px 0}
+    p.muted{color:var(--muted);margin:0}
+    .grid-2{display:grid;grid-template-columns:1fr 360px;gap:14px}
+    .map-wrap{height:520px;border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,0.04)}
+    #map{height:100%;width:100%}
+    .controls{display:flex;gap:8px;align-items:center}
+    .search-input{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:var(--texto)}
+    .btn{padding:8px 12px;border-radius:10px;border:0;background:linear-gradient(90deg,var(--morado),var(--rosado));color:white;cursor:pointer;font-weight:700;box-shadow:0 6px 24px rgba(122,62,240,0.12)}
+    .btn.ghost{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--texto)}
+    .list{max-height:420px;overflow:auto;padding-right:6px}
+    .place{display:flex;justify-content:space-between;gap:8px;padding:10px;border-radius:10px;margin-bottom:8px;background:var(--glass);border-left:4px solid rgba(181,23,158,0.12)}
+    .muted-small{font-size:13px;color:var(--muted)}
+    .torneo-card{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border-radius:10px;background:linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));border-left:6px solid rgba(181,23,158,0.14)}
+    .noticia-card{display:flex;gap:10px;align-items:center;padding:10px;border-radius:10px}
+    .noticia-card img{width:88px;height:56px;object-fit:cover;border-radius:8px}
+    .view{opacity:0;transform:translateY(8px);transition:all .32s cubic-bezier(.2,.9,.2,1)}
+    .view.active{opacity:1;transform:translateY(0)}
+    hr.sep{border:0;border-top:1px solid rgba(255,255,255,0.03);margin:12px 0}
+    .modal{position:fixed;left:0;top:0;width:100%;height:100%;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.6);z-index:9999;padding:16px}
+    .modal .box{background:var(--azul-oscuro);padding:16px;border-radius:12px;width:100%;max-width:920px;border:1px solid rgba(255,255,255,0.03);box-shadow:0 12px 40px rgba(2,4,20,0.6)}
+    .close-x{position:absolute;right:28px;top:20px;cursor:pointer;color:var(--muted);font-weight:800}
+    .marker-neon{width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-weight:800;box-shadow:0 8px 22px rgba(181,23,158,0.18);font-size:16px}
+    .pulse{box-shadow:0 0 0 rgba(181,23,158,0.3);animation:pulseMarker 1.8s infinite}
+    @keyframes pulseMarker{0%{box-shadow:0 0 0 0 rgba(181,23,158,0.18)}70%{box-shadow:0 0 0 14px rgba(181,23,158,0)}100%{box-shadow:0 0 0 0 rgba(181,23,158,0)}}
+
+    /* ---- Estilo refinado de inputs, selects y áreas de texto (menos brillantes, organizado) ---- */
+    input, textarea, select {
+      background: #2c2c3a !important;            /* gris oscuro suave */
+      color: #f0f0f0 !important;                 /* texto claro legible */
+      border: 1px solid rgba(181,23,158,0.18) !important; /* borde rosado translúcido */
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.95rem;
+      width: 100%;
+      box-sizing: border-box;
+      transition: all 0.25s ease;
+    }
+    input::placeholder, textarea::placeholder { color: #bfbfbf !important; }
+    select option {
+      background: #2c2c3a !important;
+      color: #f0f0f0 !important;
+    }
+    input:focus, textarea:focus, select:focus {
+      border-color: var(--rosado);
+      box-shadow: 0 0 8px rgba(181,23,158,0.18);
+      outline: none;
+    }
+    label { display:block;margin-bottom:6px;font-weight:600;color:#e6e6e6 }
+
+    .form-group { margin-bottom:14px; }
+
+    /* Tarjetas de historias/comentarios: estilo flotante, ordenadas */
+    .story-card {
+      background: linear-gradient(180deg, rgba(255,255,255,0.015), rgba(255,255,255,0.01));
+      border-left: 4px solid var(--rosado);
+      padding: 12px;
+      border-radius: 10px;
+      margin-bottom: 10px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.45);
+    }
+    .story-card .who { font-weight:900; font-size:1rem; color:var(--texto) }
+    .story-card .meta { color:var(--muted); font-size:12px; margin-top:8px }
+
+    /* Buttons more subtle */
+    .btn.small { padding:6px 10px; font-size:0.9rem; border-radius:8px; }
+    .btn.negative { background:#ff6b6b; }
+
+    /* responsive */
+    @media (max-width:1000px){ .grid-2{grid-template-columns:1fr} .sidebar{display:none} .map-wrap{height:420px} }
+    @media (max-width:520px){ .map-wrap{height:320px} .logo-animado{width:48px;height:48px} .sidebar{display:none} .main-panel{padding:8px} }
+    .center{display:flex;align-items:center;justify-content:center}
+    textarea{min-height:80px}
+    .badge{background:var(--rosado);padding:4px 8px;border-radius:999px;color:white;font-weight:800}
+  </style>
+</head>
+<body>
+
+<!-- decorative particles -->
+<div id="particles"></div>
+
+<div class="app">
+  <aside class="sidebar" id="sidebar">
+    <!-- El usuario indicará su propio enlace para sportle.png en el mismo directorio o URL -->
+    <img src="sportle.png" alt="SPORTLE" class="logo-animado" id="logoImg">
+    <button class="icon-btn active" data-target="inicio" onclick="mostrar('inicio', this)" title="Inicio">🏠</button>
+    <button class="icon-btn" data-target="torneos" onclick="mostrar('torneos', this)" title="Torneos">🏆</button>
+    <button class="icon-btn" data-target="cronograma" onclick="mostrar('cronograma', this)" title="Cronograma">📅</button>
+    <button class="icon-btn" data-target="noticias" onclick="mostrar('noticias', this)" title="Noticias">📰</button>
+    <button class="icon-btn" data-target="mapa" onclick="mostrar('mapa', this)" title="Mapa">🗺️</button>
+    <button class="icon-btn" data-target="historias" onclick="mostrar('historias', this)" title="Historias">💬</button>
+    <button class="icon-btn" data-target="manual" onclick="abrirManual()" title="Manual">📘</button>
+    <div class="hint">SPORTLE •  “ENTRENAMOS MENTES, ORGANIZAMOS EL TRIUNFO”</h1></div>
+  </aside>
+
+  <div class="main-panel">
+    <div class="container">
+
+      <!-- INICIO -->
+      <section id="inicio" class="card view active">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px">
+            <h1>Bienvenidos a SPORTLE “ENTRENAMOS MENTES, ORGANIZAMOS EL TRIUNFO”</h1>
+            <p class="muted">Aspiramos a impulsar una cultura deportiva inclusiva, participativa y formativa, donde la
+tecnología facilite no solo la organización y difusión de actividades deportivas, sino también el
+desarrollo de competencias físicas, sociales y emocionales en los estudiantes. Buscamos ser
+un puente entre docentes, alumnos y familias, promoviendo una educación más activa,
+colaborativa y orientada al bienestar, el liderazgo y la sana convivencia a través del deporte.</p>
+<h1>PROBLEMATICA</h1>
+            <p class="muted">En muchos colegios se pierden de eventos deportivos que pueden ofrecer
+oportunidades a jóvenes con mucho talento, esto debido a la desinformación y al
+desconocimiento de estas actividades, la empresa ve como una oportunidad esta
+aplicación que nace de una problemática que se presenta en muchos colegios,
+dando acceso a esta información para que estas instituciones tengan la
+oportunidad de permitir a sus jóvenes demostrar su talento en diferentes las
+diferentes disciplinas deportivas.</p>
+            <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+              <button class="btn" onclick="mostrar('mapa')">Ir al mapa 🗺️</button>
+              <button class="btn ghost" onclick="mostrar('torneos')">Crear torneo 🏆</button>
+              <button class="btn ghost" onclick="mostrar('historias')">Compartir historia 💬</button>
+            </div>
+          </div>
+
+          <div style="min-width:290px">
+            <div class="card" style="padding:12px;margin-bottom:10px">
+              <h3>Resumen rápido</h3>
+              <div style="margin-top:10px" class="muted-small">
+                Canchas: <strong id="countPlaces">0</strong><br>
+                Historias: <strong id="countStories">0</strong><br>
+                Torneos: <strong id="countTorneos">0</strong>
+              </div>
+            </div>
+
+            <div class="card" style="padding:10px">
+              <h4>Noticias recientes</h4>
+              <div id="inicioNoticias" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px" class="card">
+          <h3>Torneos activos</h3>
+          <div id="inicioTorneos" style="margin-top:10px"></div>
+        </div>
+      </section>
+
+      <!-- TORNEOS -->
+      <section id="torneos" class="card view" style="display:none">
+        <h2>Registrar Torneo</h2>
+        <form id="formTorneo" class="card" onsubmit="return false;">
+          <div style="display:grid;gap:10px">
+            <div class="form-group"><label for="nombreTorneo">Nombre</label><input id="nombreTorneo" placeholder="Nombre del torneo" required></div>
+
+            <div class="form-group"><label for="deporteTorneo">Deporte</label>
+              <select id="deporteTorneo">
+                <option value="">Seleccione deporte</option>
+                <option value="futbol">⚽ Fútbol</option>
+                <option value="basquet">🏀 Básquet</option>
+                <option value="voleibol">🏐 Vóley</option>
+                <option value="multideporte">⭐ Multideporte</option>
+              </select>
+            </div>
+
+            <div style="display:flex;gap:8px">
+              <div style="flex:1" class="form-group"><label for="fechaTorneo">Fecha</label><input id="fechaTorneo" type="date"></div>
+              <div style="flex:1" class="form-group"><label for="selectCanchaTorneo">Cancha</label><select id="selectCanchaTorneo"></select></div>
+            </div>
+
+            <div class="form-group"><label for="descripcionTorneo">Descripción</label><textarea id="descripcionTorneo" rows="2" placeholder="Descripción"></textarea></div>
+
+            <div style="display:flex;justify-content:flex-end">
+              <button class="btn" onclick="crearTorneo()">Crear</button>
+            </div>
+          </div>
+        </form>
+
+        <h3>Torneos registrados</h3>
+        <div id="listaTorneos" class="list" style="margin-top:8px"></div>
+
+        <!-- Modal-like area for editing a tournament -->
+        <div id="modalTorneoArea" style="margin-top:12px;display:none"></div>
+      </section>
+
+      <!-- CRONOGRAMA -->
+      <section id="cronograma" class="card view" style="display:none">
+        <h2>📅 Cronograma de Partidos</h2>
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <div class="controls">
+              <button class="btn ghost" onclick="cambiarMes(-1)">⬅</button>
+              <div id="monthTitle" style="font-weight:800;padding:0 8px"></div>
+              <button class="btn ghost" onclick="cambiarMes(1)">➡</button>
+            </div>
+            <div class="muted-small">Haz click en un día para ver/añadir partidos</div>
+          </div>
+
+          <div style="margin-top:12px">
+            <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:8px">
+              <div class="muted-small center">Dom</div><div class="muted-small center">Lun</div><div class="muted-small center">Mar</div><div class="muted-small center">Mie</div><div class="muted-small center">Jue</div><div class="muted-small center">Vie</div><div class="muted-small center">Sáb</div>
+            </div>
+            <div id="calendar" style="display:grid;grid-template-columns:repeat(7,1fr);gap:8px"></div>
+          </div>
+        </div>
+
+        <div id="dayDetails" class="card" style="display:none;margin-top:12px"></div>
+      </section>
+
+      <!-- NOTICIAS -->
+      <section id="noticias" class="card view" style="display:none">
+        <h2>Noticias</h2>
+
+        <div style="display:flex;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:260px" class="card">
+            <h4>Crear noticia</h4>
+            <div class="form-group"><label for="newsTitle">Título</label><input id="newsTitle" placeholder="Título"></div>
+            <div class="form-group"><label for="newsDesc">Descripción completa</label><textarea id="newsDesc" placeholder="Descripción completa"></textarea></div>
+            <div class="form-group"><label for="newsImg">URL imagen (opcional)</label><input id="newsImg" placeholder="https://..."></div>
+            <div class="form-group"><label for="newsLink">URL externa (opcional)</label><input id="newsLink" placeholder="https://..."></div>
+            <div style="text-align:right;margin-top:8px"><button class="btn" onclick="crearNoticia()">Publicar</button></div>
+          </div>
+
+          <div style="flex:2;min-width:260px" class="card">
+            <h4>Listado de noticias</h4>
+            <div id="newsList" style="margin-top:8px" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- MAPA -->
+      <section id="mapa" class="card view" style="display:none">
+        <h2>Mapa de canchas en Colombia</h2>
+        <p class="muted">Haz clic en el mapa para agregar una cancha. Se guardan localmente en este navegador.</p>
+
+        <div class="grid-2" style="margin-top:12px">
+          <div class="card map-wrap">
+            <div style="padding:10px;display:flex;justify-content:space-between;align-items:center">
+              <div class="controls" style="flex:1">
+                <input id="searchPlace" class="search-input" placeholder="Buscar por nombre o ciudad...">
+                <button class="btn ghost" onclick="renderPlacesList()">Buscar</button>
+              </div>
+              <div style="display:flex;gap:8px">
+                <button class="btn" onclick="fitToPlaces()">Ver todas</button>
+                <button class="btn" onclick="exportPlaces()">Exportar</button>
+              </div>
+            </div>
+            <div id="map"></div>
+          </div>
+
+          <aside class="card">
+            <h3>Lista de canchas</h3>
+            <div id="placesList" class="list" style="margin-top:8px"></div>
+            <hr class="sep">
+            <div class="muted-small">Haz clic en el mapa para añadir. Usa la búsqueda para filtrar.</div>
+          </aside>
+        </div>
+      </section>
+
+      <!-- HISTORIAS -->
+      <section id="historias" class="card view" style="display:none">
+        <h2>Historias y apoyo emocional</h2>
+        <p class="muted">Comparte una experiencia deportiva y lee consejos para tranquilizarte cuando las cosas no salen.</p>
+
+        <div style="display:grid;grid-template-columns:1fr 320px;gap:12px;margin-top:12px">
+          <div class="card">
+            <form id="formStory" class="stories-form" onsubmit="return false;">
+              <div class="form-group"><label for="storyAuthor">Tu nombre (opcional)</label><input id="storyAuthor" type="text" placeholder="Tu nombre (opcional)"></div>
+              <div class="form-group"><label for="storyText">Cuenta tu historia</label><textarea id="storyText" placeholder="Cuenta tu historia, cómo te sentiste y qué aprendiste"></textarea></div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px">
+                <div class="muted-small">Las historias se guardan localmente</div>
+                <div><button class="btn" type="button" onclick="submitStory()">Compartir</button></div>
+              </div>
+            </form>
+
+            <div id="storiesList" style="margin-top:12px"></div>
+          </div>
+
+          <aside class="card">
+            <h3>Cómo calmarte tras una derrota</h3>
+            <ol style="margin-top:8px">
+              <li>Respira y no tomes decisiones impulsivas.</li>
+              <li>Desconecta 10 min: estira, hidrátate.</li>
+              <li>Escribe 3 aprendizajes concretos.</li>
+            </ol>
+            <hr class="sep">
+            <h4>Mensajes que ayudan</h4>
+            <p class="muted-small">"Hoy no salió, mañana practicamos más" • "Lo diste todo" • "Sigue, esto suma experiencia"</p>
+          </aside>
+        </div>
+      </section>
+
+      <!-- MANUAL (modal) -->
+      <section id="manual-hidden" style="display:none"></section>
+
+    </div>
+  </div>
+</div>
+
+<!-- Modal: noticia -->
+<div id="modalNoticia" class="modal"><div class="box" id="modalNoticiaBox" style="position:relative"><span class="close-x" onclick="cerrarModalNoticia()">✖</span><div id="modalNoticiaContent"></div></div></div>
+
+<!-- Modal: manual -->
+<div id="modalManual" class="modal">
+  <div class="box" style="position:relative">
+    <span class="close-x" onclick="cerrarManual()">✖</span>
+    <h2>Manual de Usuario — SPORTLE</h2>
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:12px;margin-top:12px">
+      <div>
+        <h3>1. Inicio</h3>
+        <p class="muted-small">Panel principal con noticias recientes, torneos activos y accesos rápidos.</p>
+
+        <h3>2. Mapa</h3>
+        <p class="muted-small">Explora canchas en Colombia, agrega nuevas con un clic y vincula torneos a canchas mediante su nombre.</p>
+
+        <h3>3. Torneos</h3>
+        <p class="muted-small">Crea torneos, agrega equipos y jugadores, registra estadísticas (goles/puntos/asistencias/aces/bloqueos). Al crear un torneo selecciona la cancha desde el menú desplegable con las canchas guardadas.</p>
+
+        <h3>4. Cronograma</h3>
+        <p class="muted-small">Agenda partidos en días concretos. Haz clic en el día, añade partido y asócialo a un torneo.</p>
+
+        <h3>5. Noticias</h3>
+        <p class="muted-small">Publica noticias que se mostrarán automáticamente en el inicio. Cada noticia abre un modal con contenido completo (título, descripción, imagen y link opcional).</p>
+
+        <h3>6. Historias</h3>
+        <p class="muted-small">Comparte experiencias y consejos para manejar la frustración. Las historias se guardan localmente.</p>
+
+        <h3>7. Guardado local</h3>
+        <p class="muted-small">Todos los datos (canchas, torneos, partidos, noticias, historias) se guardan en tu navegador usando localStorage. No se sincronizan en la nube.</p>
+
+        <hr class="sep">
+        <p class="muted-small">Consejo: Haz exportaciones periódicas de las canchas (botón Exportar) si quieres guardarlas fuera del navegador.</p>
+      </div>
+
+      <aside class="card" style="padding:12px">
+        <h4>Atajos rápidos</h4>
+        <ul style="margin:8px 0" class="muted-small">
+          <li>Mapa → Buscar / Añadir cancha</li>
+          <li>Torneos → Crear / Agregar equipos y jugadores</li>
+          <li>Cronograma → Añadir partidos a fechas</li>
+          <li>Noticias → Publicar y ver en inicio</li>
+        </ul>
+        <h4>Colores</h4>
+        <p class="muted-small">Morado • Azul oscuro • Rosado — paleta deportiva y juvenil.</p>
+      </aside>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================
+   Datos y persistencia
+   ========================= */
+let torneos = JSON.parse(localStorage.getItem('sportle_torneos') || '[]');
+let partidos = JSON.parse(localStorage.getItem('sportle_partidos') || '{}');
+let stories = JSON.parse(localStorage.getItem('sportle_stories') || '[]');
+let places = JSON.parse(localStorage.getItem('sportle_places') || 'null');
+let noticias = JSON.parse(localStorage.getItem('sportle_noticias') || 'null');
+
+const samplePlaces = [
+  {name:'Cancha Bogotá - Polideportivo',city:'Bogotá',lat:4.7110,lng:-74.0721,type:'Fútbol',desc:'Cancha sintética comunitaria'},
+  {name:'Cancha Medellín - Parque',city:'Medellín',lat:6.2442,lng:-75.5812,type:'Fútbol',desc:'Césped natural'},
+  {name:'Cancha Cali - Unidad Deportiva',city:'Cali',lat:3.4516,lng:-76.5320,type:'Vóley',desc:'Multideporte'},
+  {name:'Cancha Barranquilla - Barrio',city:'Barranquilla',lat:10.9685,lng:-74.7813,type:'Fútbol',desc:'Iluminada'},
+  {name:'Cancha Cartagena - Bocagrande',city:'Cartagena',lat:10.3910,lng:-75.4794,type:'Fútbol Playa',desc:'Cercana al mar'},
+  {name:'Cancha Bucaramanga - Parque',city:'Bucaramanga',lat:7.1193,lng:-73.1227,type:'Basquet',desc:'Cancha al aire libre'}
+];
+
+const sampleNews = [
+  {titulo:'Liga escolar local inicia noviembre', descripcion:'Inscripciones abiertas para colegios. Más información en la secretaría deportiva local.', imagen:'', url:''},
+  {titulo:'Clínica de entrenamiento mental', descripcion:'Talleres gratuitos en varias ciudades para manejo emocional en deportistas.', imagen:'', url:''}
+];
+
+if(!places){ places = samplePlaces; localStorage.setItem('sportle_places', JSON.stringify(places)); }
+if(!noticias){ noticias = sampleNews; localStorage.setItem('sportle_noticias', JSON.stringify(noticias)); }
+
+/* =========================
+   Helpers
+   ========================= */
+function escapeHtml(text){
+  if(typeof text === 'undefined' || text === null) return '';
+  return String(text).replace(/[&<>"']/g, function(m){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]; });
+}
+
+/* decorative particles */
+function makeParticles(){
+  const container = document.getElementById('particles');
+  const colors = ['rgba(181,23,158,0.06)','rgba(122,62,240,0.05)','rgba(255,255,255,0.03)'];
+  for(let i=0;i<12;i++){
+    const el = document.createElement('div'); el.className='particle';
+    const size = 40 + Math.random()*120;
+    el.style.width = size+'px'; el.style.height = size+'px';
+    el.style.left = (5 + Math.random()*90) + '%'; el.style.top = (5 + Math.random()*90) + '%';
+    el.style.background = colors[i % colors.length];
+    el.style.borderRadius = '50%';
+    el.style.opacity = 0.06;
+    el.style.position = 'absolute';
+    el.style.transform = 'translate(-50%,-50%)';
+    container.appendChild(el);
+    const key = `@keyframes float${i} {0%{transform:translate(-50%,-50%) translateY(0)}50%{transform:translate(-50%,-50%) translateY(${20 + Math.random()*60}px)}100%{transform:translate(-50%,-50%) translateY(0)}}`;
+    const s = document.createElement('style'); s.innerHTML = key; document.head.appendChild(s);
+    el.style.animation = `float${i} ${(8+Math.random()*12).toFixed(2)}s ease-in-out infinite`;
+  }
+}
+makeParticles();
+
+/* =========================
+   Navegación
+   ========================= */
+function mostrar(id, btn){
+  document.querySelectorAll('.view').forEach(v=>{ v.classList.remove('active'); v.style.display='none'; });
+  const el = document.getElementById(id);
+  if(el){ el.style.display=''; setTimeout(()=> el.classList.add('active'), 20); }
+  document.querySelectorAll('.icon-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  if(id==='mapa' && window._map) setTimeout(()=> window._map.invalidateSize(), 220);
+}
+window.mostrar = mostrar;
+
+/* =========================
+   Noticias (crear / listar / modal)
+   ========================= */
+function renderNews(){
+  const list = document.getElementById('newsList'); list.innerHTML='';
+  noticias.forEach((n,i)=>{
+    const el = document.createElement('div'); el.className='noticia-card card';
+    el.innerHTML = `<div style="flex:1">
+        <strong>${escapeHtml(n.titulo)}</strong>
+        <div class="muted-small" style="margin-top:6px">${escapeHtml(n.descripcion.slice(0,140))}${n.descripcion.length>140?'...':''}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="btn ghost" onclick="openNews(${i})">Ver</button>
+        <button class="btn negative" onclick="eliminarNoticia(${i})">Eliminar</button>
+      </div>`;
+    list.appendChild(el);
+  });
+
+  // inicio noticias (ultimas 3)
+  const inicioDiv = document.getElementById('inicioNoticias'); inicioDiv.innerHTML='';
+  noticias.slice().reverse().slice(0,3).forEach((n,i)=>{
+    const d = document.createElement('div'); d.className='noticia-card'; d.style.marginBottom='8px';
+    d.innerHTML = `<div style="flex:1"><strong>${escapeHtml(n.titulo)}</strong><div class="muted-small">${escapeHtml(n.descripcion.slice(0,80))}${n.descripcion.length>80?'...':''}</div></div><div><button class="btn ghost" onclick="openNews(${noticias.length-1-i})">Ver</button></div>`;
+    inicioDiv.appendChild(d);
+  });
+
+  localStorage.setItem('sportle_noticias', JSON.stringify(noticias));
+}
+
+function crearNoticia(){
+  const t = document.getElementById('newsTitle').value.trim();
+  const d = document.getElementById('newsDesc').value.trim();
+  const img = document.getElementById('newsImg').value.trim();
+  const url = document.getElementById('newsLink').value.trim();
+  if(!t || !d) return alert('Título y descripción son obligatorios');
+  noticias.push({titulo:t, descripcion:d, imagen:img, url:url});
+  document.getElementById('newsTitle').value=''; document.getElementById('newsDesc').value=''; document.getElementById('newsImg').value=''; document.getElementById('newsLink').value='';
+  renderNews(); alert('Noticia creada');
+}
+
+function openNews(i){
+  const n = noticias[i];
+  const modal = document.getElementById('modalNoticia'); modal.style.display='flex';
+  const box = document.getElementById('modalNoticiaContent');
+  box.innerHTML = `<div style="display:flex;flex-direction:column;gap:10px">
+    ${n.imagen?`<img src="${escapeHtml(n.imagen)}" alt="" style="width:100%;border-radius:8px;object-fit:cover;max-height:360px">`:''}
+    <h3>${escapeHtml(n.titulo)}</h3>
+    <p class="muted-small" style="white-space:pre-wrap">${escapeHtml(n.descripcion)}</p>
+    ${n.url?`<div style="text-align:right"><a href="${escapeHtml(n.url)}" target="_blank" class="btn">Abrir fuente</a></div>`:''}
+  </div>`;
+}
+function cerrarModalNoticia(){ document.getElementById('modalNoticia').style.display='none'; }
+function eliminarNoticia(i){ if(!confirm('Eliminar noticia?')) return; noticias.splice(i,1); renderNews(); }
+
+/* =========================
+   Torneos (crear, listar, editar equipos/jugadores, link cancha)
+   ========================= */
+function llenarSelectCancha(){
+  const sel = document.getElementById('selectCanchaTorneo'); sel.innerHTML = '<option value="">Sin cancha</option>';
+  places.forEach((p,i)=> sel.innerHTML += `<option value="${i}">${escapeHtml(p.name)} — ${escapeHtml(p.city||'')}</option>`);
+}
+llenarSelectCancha();
+
+function crearTorneo(){
+  const nombre = document.getElementById('nombreTorneo').value.trim();
+  const deporte = document.getElementById('deporteTorneo').value;
+  const fecha = document.getElementById('fechaTorneo').value;
+  const desc = document.getElementById('descripcionTorneo').value.trim();
+  const canchaIndex = document.getElementById('selectCanchaTorneo').value;
+  if(!nombre) return alert('Nombre obligatorio');
+  const torneo = {nombre,deporte,fecha,descripcion:desc,equipos:[],finalizado:false,canchaIndex: canchaIndex !== '' ? parseInt(canchaIndex,10) : null};
+  torneos.push(torneo);
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  document.getElementById('formTorneo').reset();
+  renderTorneos(); actualizarInicioTorneos(); alert('Torneo creado');
+}
+
+function renderTorneos(){
+  const cont = document.getElementById('listaTorneos'); cont.innerHTML='';
+  if(torneos.length===0){ cont.innerHTML = '<div class="muted-small">No hay torneos. Crea uno arriba.</div>'; }
+  torneos.forEach((t,i)=>{
+    const canchaName = (t.canchaIndex != null && places[t.canchaIndex]) ? ` · Cancha: ${escapeHtml(places[t.canchaIndex].name)}` : '';
+    const div = document.createElement('div'); div.className='torneo-card';
+    div.innerHTML = `<div style="flex:1">
+        <strong>${escapeHtml(t.nombre)}</strong>
+        <div class="muted-small">${t.fecha || '-'} · ${escapeHtml(t.deporte)}${canchaName}</div>
+        <div class="muted-small">${escapeHtml(t.descripcion||'')}</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <button class="btn ghost" onclick="abrirTorneo(${i})">Ver / Editar</button>
+        <button class="btn" onclick="finalizarTorneo(${i})">${t.finalizado? 'Reactivar' : 'Finalizar'}</button>
+      </div>`;
+    cont.appendChild(div);
+  });
+  document.getElementById('countTorneos').innerText = torneos.length;
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  llenarSelectCancha();
+  actualizarInicioTorneos();
+}
+
+function abrirTorneo(index){
+  const area = document.getElementById('modalTorneoArea'); area.style.display='block';
+  const t = torneos[index];
+  let html = `<div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start">
+    <div>
+      <h3>${escapeHtml(t.nombre)}</h3>
+      <div class="muted-small">Deporte: ${escapeHtml(t.deporte)} · Fecha: ${escapeHtml(t.fecha)}</div>
+      <div class="muted-small" style="margin-top:6px">${escapeHtml(t.descripcion)}</div>
+    </div>
+    <div style="text-align:right">
+      <button class="btn ghost" onclick="closeTorneoArea()">Cerrar</button>
+    </div>
+  </div><hr class="sep">`;
+
+  html += `<div><h4>Equipos</h4>`;
+  if(!t.equipos || t.equipos.length===0) html += `<div class="muted-small">No hay equipos aún.</div>`;
+  t.equipos.forEach((eq,ei)=>{
+    html += `<div style="padding:8px;margin-top:8px;border-radius:8px;background:linear-gradient(180deg, rgba(255,255,255,0.01), rgba(255,255,255,0.005));display:flex;justify-content:space-between;align-items:center">
+      <div>
+        <strong>${escapeHtml(eq.nombre)}</strong>
+        <div class="muted-small">${(eq.jugadores||[]).length} jugadores</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <button class="btn ghost" onclick="promptAgregarJugador(${index},${ei})">+ Jugador</button>
+        <button class="btn ghost" onclick="verEquipo(${index},${ei})">Ver</button>
+        <button class="btn negative" onclick="eliminarEquipo(${index},${ei})">Eliminar</button>
+      </div>
+    </div>`;
+  });
+  html += `<div style="margin-top:8px;text-align:right"><button class="btn" onclick="promptAgregarEquipoSimple(${index})">+ Agregar Equipo</button></div></div>`;
+  area.innerHTML = html;
+}
+
+function closeTorneoArea(){ document.getElementById('modalTorneoArea').style.display='none'; renderTorneos(); }
+
+function promptAgregarEquipoSimple(index){
+  const nombre = prompt('Nombre del equipo:'); if(!nombre) return;
+  torneos[index].equipos = torneos[index].equipos || [];
+  torneos[index].equipos.push({nombre,jugadores:[]});
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  abrirTorneo(index);
+}
+
+function eliminarEquipo(tIndex,eIndex){
+  if(!confirm('Eliminar equipo?')) return;
+  torneos[tIndex].equipos.splice(eIndex,1);
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  abrirTorneo(tIndex);
+}
+
+function promptAgregarJugador(tIndex,eIndex){
+  const nombre = prompt('Nombre del jugador:'); if(!nombre) return;
+  const deporte = torneos[tIndex].deporte;
+  const stats = {};
+  if(deporte === 'futbol'){
+    stats.goles = parseInt(prompt('Goles (número):')||'0');
+    stats.asistencias = parseInt(prompt('Asistencias (número):')||'0');
+  } else if(deporte === 'basquet'){
+    stats.puntos = parseInt(prompt('Puntos:')||'0');
+    stats.rebotes = parseInt(prompt('Rebotes:')||'0');
+  } else if(deporte === 'voleibol'){
+    stats.aces = parseInt(prompt('Aces:')||'0');
+    stats.bloqueos = parseInt(prompt('Bloqueos:')||'0');
+  } else {
+    stats.score = parseInt(prompt('Puntuación (número):')||'0');
+  }
+  torneos[tIndex].equipos[eIndex].jugadores = torneos[tIndex].equipos[eIndex].jugadores || [];
+  torneos[tIndex].equipos[eIndex].jugadores.push({nombre,stats});
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  abrirTorneo(tIndex);
+}
+
+function verEquipo(tIndex,eIndex){
+  const equipo = torneos[tIndex].equipos[eIndex];
+  let html = `<div class="card"><div style="display:flex;justify-content:space-between"><div><h3>${escapeHtml(equipo.nombre)}</h3><div class="muted-small">${(equipo.jugadores||[]).length} jugadores</div></div><div><button class="btn ghost" onclick="abrirTorneo(${tIndex})">Atrás</button></div></div><hr class="sep">`;
+  if(!equipo.jugadores || equipo.jugadores.length===0) html += `<div class="muted-small">No hay jugadores aún</div>`;
+  (equipo.jugadores||[]).forEach((j,ji)=>{
+    html += `<div class="story-card">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div class="who">${escapeHtml(j.nombre)}</div>
+          <div class="muted-small">${Object.entries(j.stats||{}).map(([k,v])=>`${k}: ${v}`).join(' · ')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn ghost" onclick="actualizarJugadorPrompt(${tIndex},${eIndex},${ji})">Actualizar</button>
+          <button class="btn negative" onclick="eliminarJugador(${tIndex},${eIndex},${ji})">Eliminar</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('modalTorneoArea').innerHTML = html;
+}
+
+function actualizarJugadorPrompt(tIndex,eIndex,jIndex){
+  const jugador = torneos[tIndex].equipos[eIndex].jugadores[jIndex];
+  const deporte = torneos[tIndex].deporte;
+  if(deporte === 'futbol'){
+    jugador.stats.goles = parseInt(prompt('Goles:', jugador.stats.goles||0) || jugador.stats.goles);
+    jugador.stats.asistencias = parseInt(prompt('Asistencias:', jugador.stats.asistencias||0) || jugador.stats.asistencias);
+  } else if(deporte === 'basquet'){
+    jugador.stats.puntos = parseInt(prompt('Puntos:', jugador.stats.puntos||0) || jugador.stats.puntos);
+    jugador.stats.rebotes = parseInt(prompt('Rebotes:', jugador.stats.rebotes||0) || jugador.stats.rebotes);
+  } else if(deporte === 'voleibol'){
+    jugador.stats.aces = parseInt(prompt('Aces:', jugador.stats.aces||0) || jugador.stats.aces);
+    jugador.stats.bloqueos = parseInt(prompt('Bloqueos:', jugador.stats.bloqueos||0) || jugador.stats.bloqueos);
+  } else {
+    jugador.stats.score = parseInt(prompt('Puntuación:', jugador.stats.score||0) || jugador.stats.score);
+  }
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  verEquipo(tIndex,eIndex);
+}
+
+function eliminarJugador(tIndex,eIndex,jIndex){
+  if(!confirm('Eliminar jugador?')) return;
+  torneos[tIndex].equipos[eIndex].jugadores.splice(jIndex,1);
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  verEquipo(tIndex,eIndex);
+}
+
+function finalizarTorneo(index){
+  torneos[index].finalizado = !torneos[index].finalizado;
+  localStorage.setItem('sportle_torneos', JSON.stringify(torneos));
+  renderTorneos();
+}
+
+/* =========================
+   Calendario (cronograma)
+   ========================= */
+let today = new Date(); let currentYear = today.getFullYear(); let currentMonth = today.getMonth(); let selectedDate = null;
+function ymd(date){ const y=date.getFullYear(); const m=String(date.getMonth()+1).padStart(2,'0'); const d=String(date.getDate()).padStart(2,'0'); return `${y}-${m}-${d}`; }
+function displayDateStr(ymdStr){ const d=new Date(ymdStr); return d.toLocaleDateString(); }
+const calendarEl = document.getElementById('calendar'); const monthTitle = document.getElementById('monthTitle');
+
+function generarCalendarioMensual(){
+  const first=new Date(currentYear,currentMonth,1), last=new Date(currentYear,currentMonth+1,0);
+  monthTitle.innerText = first.toLocaleString(undefined,{month:'long',year:'numeric'});
+  calendarEl.innerHTML = '';
+  const startWeekDay = first.getDay();
+  for(let i=0;i<startWeekDay;i++){ const empty=document.createElement('div'); empty.className='card muted-small center'; empty.style.minHeight='70px'; empty.style.opacity='0.4'; calendarEl.appendChild(empty); }
+  for(let d=1; d<=last.getDate(); d++){
+    const dateObj=new Date(currentYear,currentMonth,d); const key=ymd(dateObj);
+    const cell=document.createElement('div'); cell.className='card'; cell.style.minHeight='70px'; cell.style.cursor='pointer';
+    const lista = partidos[key] || [];
+    cell.innerHTML = `<div style="font-weight:800">${d}</div><div class="muted-small">${lista.length?lista.length+' partido(s)':''}</div>`;
+    cell.addEventListener('click', ()=> selectDay(key));
+    calendarEl.appendChild(cell);
+  }
+}
+
+function cambiarMes(delta){ currentMonth += delta; if(currentMonth<0){currentMonth=11;currentYear--} if(currentMonth>11){currentMonth=0;currentYear++} generarCalendarioMensual(); }
+
+function selectDay(key){
+  selectedDate = key; const details = document.getElementById('dayDetails'); details.style.display='block';
+  const lista = partidos[key] || []; let html = `<h3>Partidos: ${displayDateStr(key)}</h3>`;
+  if(lista.length === 0) html += `<div class="muted-small">No hay partidos programados.</div>`;
+  else { html += lista.map(p=>`<div class="card" style="margin-top:8px;padding:8px"><strong>${escapeHtml(p.name)}</strong><div class="muted-small">${p.time || ''} ${p.torneoIndex!=null? ' · '+escapeHtml(torneos[p.torneoIndex]?.nombre || '') : ''}</div></div>`).join(''); }
+  html += `<hr class="sep"><h4>Agregar partido</h4>
+    <div style="display:grid;gap:8px">
+      <input id="inputMatchName" placeholder="Equipo A vs Equipo B">
+      <input id="inputMatchTime" type="time">
+      <select id="selectMatchTorneo">
+        <option value="">Sin torneo</option>
+        ${torneos.map((t,i)=>`<option value="${i}">${escapeHtml(t.nombre)}</option>`).join('')}
+      </select>
+      <div style="text-align:right;margin-top:8px"><button class="btn" onclick="agregarPartido()">Agregar</button></div>
+    </div>`;
+  details.innerHTML = html;
+}
+
+function agregarPartido(){
+  const name = document.getElementById('inputMatchName')?.value?.trim();
+  const time = document.getElementById('inputMatchTime')?.value || '';
+  const select = document.getElementById('selectMatchTorneo');
+  const torneoIndex = select && select.value !== "" ? parseInt(select.value,10) : null;
+  if(!selectedDate) return alert('Selecciona un día primero'); if(!name) return alert('Nombre del partido requerido');
+  partidos[selectedDate] = partidos[selectedDate] || []; partidos[selectedDate].push({name,time,torneoIndex});
+  localStorage.setItem('sportle_partidos', JSON.stringify(partidos));
+  generarCalendarioMensual(); selectDay(selectedDate);
+}
+
+/* =========================
+   Historias
+   ========================= */
+function renderStories(){
+  const list = document.getElementById('storiesList'); list.innerHTML='';
+  if(stories.length===0){ list.innerHTML = '<div class="muted-small">No hay historias — anímate a compartir la tuya.</div>'; }
+  stories.slice().reverse().forEach(s=>{
+    const d=document.createElement('div'); d.className='story-card';
+    d.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <div class="who">${escapeHtml(s.author||'Anónimo')}</div>
+        <div style="margin-top:6px">${escapeHtml(s.text)}</div>
+        <div class="muted-small" style="margin-top:8px">Consejo: ${escapeHtml(s.tip||'—')}</div>
+      </div>
+      <div class="muted-small" style="text-align:right">${new Date(s.date).toLocaleString()}</div>
+    </div>`;
+    list.appendChild(d);
+  });
+  document.getElementById('countStories').innerText = stories.length;
+  localStorage.setItem('sportle_stories', JSON.stringify(stories));
+}
+function submitStory(){
+  const author = document.getElementById('storyAuthor').value.trim();
+  const text = document.getElementById('storyText').value.trim();
+  if(!text) return alert('Escribe tu historia primero');
+  const tip = prompt('¿Qué consejo o técnica usas para calmarte tras una derrota? (opcional)') || '';
+  stories.push({author,text,tip,date:new Date().toISOString()});
+  document.getElementById('formStory').reset(); renderStories(); alert('Gracias por compartir — tu historia se guardó localmente.');
+}
+
+/* =========================
+   MAPA (centrado en Colombia)
+   ========================= */
+const map = L.map('map',{minZoom:5}).setView([4.5709,-74.2973],6); // Colombia center
+window._map = map;
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',{attribution:'© CartoDB, OpenStreetMap contributors'}).addTo(map);
+const markersGroup = L.layerGroup().addTo(map);
+
+function makeNeonIconForType(type){
+  let symbol='★'; let color='var(--rosado)';
+  type = (type||'').toLowerCase();
+  if(type.includes('fút') || type.includes('fut') || type.includes('fútbol')){ symbol='⚽'; color='#ff7ab6'; }
+  else if(type.includes('bas') || type.includes('basquet')){ symbol='🏀'; color='#ff9f1c'; }
+  else if(type.includes('vol') || type.includes('voley')){ symbol='🏐'; color='#00d4ff'; }
+  else if(type.includes('playa')){ symbol='🏖️'; color='#ffd166'; }
+  else { symbol='★'; color='#b5179e'; }
+  const html = `<div class="marker-neon pulse" style="background:${color};border:2px solid rgba(255,255,255,0.06)">${symbol}</div>`;
+  return L.divIcon({html,iconSize:[40,40],className:''});
+}
+
+function renderMarkers(){
+  markersGroup.clearLayers();
+  places.forEach((p, idx)=>{
+    const marker = L.marker([p.lat,p.lng], {icon: makeNeonIconForType(p.type)}).addTo(markersGroup);
+    const torneosEnLugar = torneos.filter(t => t.canchaIndex === idx);
+    const torneosHtml = torneosEnLugar.length ? `<div style="margin-top:8px" class="muted-small"><strong>Torneos aquí:</strong><br>${torneosEnLugar.map(t=>escapeHtml(t.nombre)).join('<br>')}</div>` : '';
+    const popupHtml = `<strong>${escapeHtml(p.name)}</strong><div class="muted-small">${escapeHtml(p.city)} · ${escapeHtml(p.type)}</div><div style="margin-top:8px">${escapeHtml(p.desc)}</div>${torneosHtml}
+      <div style="margin-top:8px;text-align:right"><button class="btn ghost" onclick="panToPlace(${idx})">Ir</button></div>`;
+    marker.bindPopup(popupHtml);
+  });
+  renderPlacesList();
+}
+
+function renderPlacesList(){
+  const list = document.getElementById('placesList'); list.innerHTML='';
+  const q = (document.getElementById('searchPlace').value || '').toLowerCase();
+  const filtered = places.filter(p=> (p.name + ' ' + (p.city||'') + ' ' + (p.type||'')).toLowerCase().includes(q));
+  if(filtered.length===0) list.innerHTML = '<div class="muted-small">No hay canchas que coincidan.</div>';
+  filtered.forEach((p, idx)=>{
+    const el = document.createElement('div'); el.className='place';
+    el.innerHTML = `<div><strong>${escapeHtml(p.name)}</strong><div class="muted-small">${escapeHtml(p.city)} · ${escapeHtml(p.type)}</div></div>
+      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
+        <button class="btn ghost" onclick="panToPlace(${idx})">Ir</button>
+        <button class="btn ghost" style="color:#ff7777" onclick="removePlace(${idx})">Eliminar</button>
+      </div>`;
+    list.appendChild(el);
+  });
+  document.getElementById('countPlaces').innerText = places.length;
+  llenarSelectCancha();
+}
+
+map.on('click', function(e){
+  const lat = e.latlng.lat, lng = e.latlng.lng;
+  const name = prompt('Nombre de la cancha:'); if(!name) return;
+  const city = prompt('Ciudad / Barrio (opcional):')||'';
+  const type = prompt('Tipo (Fútbol, Basquet, Vóley, Multideporte...):')||'';
+  const desc = prompt('Descripción breve (opcional):')||'';
+  places.push({name,city,lat,lng,type,desc});
+  localStorage.setItem('sportle_places', JSON.stringify(places));
+  renderMarkers(); alert('Cancha guardada localmente.');
+});
+
+function panToPlace(i){ const p=places[i]; map.setView([p.lat,p.lng],15); mostrar('mapa'); setTimeout(()=>map.invalidateSize(),220); }
+function removePlace(i){ if(!confirm('Eliminar esta cancha?')) return; places.splice(i,1); localStorage.setItem('sportle_places', JSON.stringify(places)); renderMarkers(); }
+function fitToPlaces(){ if(places.length===0) return; const group = places.map(p=>[p.lat,p.lng]); const bounds = L.latLngBounds(group); map.fitBounds(bounds.pad(0.15)); }
+function exportPlaces(){ const dataStr = JSON.stringify(places,null,2); const blob=new Blob([dataStr],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='sportle_canchas.json'; a.click(); URL.revokeObjectURL(url); }
+
+/* =========================
+   Inicio: noticias + torneos recientes
+   ========================= */
+function actualizarInicioTorneos(){
+  const div = document.getElementById('inicioTorneos'); div.innerHTML='';
+  const activos = torneos.filter(t=>!t.finalizado).slice().reverse().slice(0,4);
+  if(activos.length===0) div.innerHTML = '<div class="muted-small">No hay torneos activos</div>';
+  activos.forEach(t=>{
+    const el = document.createElement('div'); el.className='torneo-card'; el.style.marginBottom='8px';
+    const canchaName = (t.canchaIndex != null && places[t.canchaIndex]) ? escapeHtml(places[t.canchaIndex].name) : 'Sin cancha';
+    el.innerHTML = `<div style="flex:1"><strong>${escapeHtml(t.nombre)}</strong><div class="muted-small">${escapeHtml(t.deporte)} · ${canchaName}</div></div><div><button class="btn ghost" onclick="buscarYMostrarTorneo('${escapeHtml(t.nombre)}')">Ver</button></div>`;
+    div.appendChild(el);
+  });
+}
+
+function buscarYMostrarTorneo(nombre){
+  const idx = torneos.findIndex(t=>t.nombre===nombre);
+  if(idx>=0){ mostrar('torneos'); setTimeout(()=> abrirTorneo(idx), 200); } else alert('Torneo no encontrado');
+}
+
+/* =========================
+   Manual modal
+   ========================= */
+function abrirManual(){ document.getElementById('modalManual').style.display='flex'; }
+function cerrarManual(){ document.getElementById('modalManual').style.display='none'; }
+
+/* =========================
+   Inicialización
+   ========================= */
+function init(){
+  renderNews();
+  renderTorneos();
+  generarCalendarioMensual();
+  renderStories();
+  renderMarkers();
+  renderPlacesList();
+  actualizarInicioTorneos();
+  setTimeout(()=>map.invalidateSize(),500);
+}
+init();
+
+/* expose some functions globally for inline onclicks */
+window.openNews = openNews;
+window.cerrarModalNoticia = cerrarModalNoticia;
+window.panToPlace = panToPlace;
+window.removePlace = removePlace;
+window.fitToPlaces = fitToPlaces;
+window.exportPlaces = exportPlaces;
+window.abrirManual = abrirManual;
+window.cerrarManual = cerrarManual;
+
+</script>
+</body>
+</html>
